@@ -1,3 +1,4 @@
+
 pipeline {
     agent any
 
@@ -20,12 +21,20 @@ pipeline {
         stage('Sonar Scan') {
             steps {
                 echo 'Running SonarQube scan'
-                sh '''
-                    cd Application
-                    mvn sonar:sonar \
-                      -Dsonar.host.url=http://18.215.188.231:9000 \
-                      -Dsonar.login=sqa_18b1bf8d176f889b76171dc1a0c1580e80dff8b2
-                '''
+
+                withCredentials([string(
+                    credentialsId: 'sonar-token',
+                    variable: 'SONAR_TOKEN'
+                )]) {
+                    sh '''
+                        cd Application
+
+                        mvn clean verify \
+                          org.sonarsource.scanner.maven:sonar-maven-plugin:5.0.0.4389:sonar \
+                          -Dsonar.host.url=http://18.215.188.231:9000 \
+                          -Dsonar.token=$SONAR_TOKEN
+                    '''
+                }
             }
         }
 
@@ -48,8 +57,9 @@ pipeline {
             steps {
                 script {
                     withCredentials([string(credentialsId: 'dockerhub', variable: 'dockerhub')]) {
-                        sh 'echo "${dockerhub}" | docker login -u devopshubg333 --password-stdin'
+                        sh 'echo "$dockerhub" | docker login -u devopshubg333 --password-stdin'
                     }
+
                     sh 'docker push guru0114/k8s:${BUILD_NUMBER}'
                 }
             }
@@ -60,6 +70,7 @@ pipeline {
                 GIT_REPO_NAME = "REALTIMEPROJECT"
                 GIT_USER_NAME = "Gurraiah123"
             }
+
             steps {
                 withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
                     sh '''
@@ -68,9 +79,14 @@ pipeline {
 
                         sed -i "s|k8s:.*|k8s:${BUILD_NUMBER}|g" Ansible/k8s_deployment.yaml
 
-                        git add .
-                        git commit -m "Update deployment image tag to version ${BUILD_NUMBER}"
-                        git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
+                        git add Ansible/k8s_deployment.yaml
+
+                        if ! git diff --cached --quiet; then
+                            git commit -m "Update deployment image tag to version ${BUILD_NUMBER}"
+                            git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
+                        else
+                            echo "No deployment manifest changes to commit"
+                        fi
                     '''
                 }
             }
