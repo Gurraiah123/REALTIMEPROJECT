@@ -6,25 +6,38 @@
   become: yes
 
   tasks:
-    - name: copy kubernetes deployment file to appserver
-      copy:
-        src: "{{ playbook_dir }}/deployments.yaml"
-        dest: /home/ec2-user/deployments.yaml
-        mode: "0644"
+    - name: Create Kubernetes configuration directory
+      file:
+        path: /home/ec2-user/.kube
+        state: directory
+        owner: ec2-user
+        group: ec2-user
+        mode: '0700'
 
-    - name: check kubeconfig file exist
+    - name: Copy Kubernetes deployment file to appserver
+      copy:
+        src: "{{ playbook_dir }}/deployment.yaml"
+        dest: /home/ec2-user/deployment.yaml
+        owner: ec2-user
+        group: ec2-user
+        mode: '0644'
+
+    - name: Check kubeconfig file exists
       stat:
         path: /home/ec2-user/.kube/config
       register: kubeconfig_stat
 
-    - name: copy kubeconfig file to target if missing
+    - name: Copy kubeconfig file to target if missing
       copy:
         src: "{{ playbook_dir }}/kubeconfig"
         dest: /home/ec2-user/.kube/config
         owner: ec2-user
+        group: ec2-user
+        mode: '0600'
       when: not kubeconfig_stat.stat.exists
 
-    - name: Apply kubernetes deployment
-      command: kubectl apply -f /home/ec2-user/deployments.yaml
+    - name: Apply Kubernetes deployment
+      command: kubectl apply -f /home/ec2-user/deployment.yaml
+      become_user: ec2-user
       environment:
         KUBECONFIG: /home/ec2-user/.kube/config
